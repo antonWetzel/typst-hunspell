@@ -1,4 +1,4 @@
-use std::{io::stdout, io::Write, path::Path, str::Chars};
+use std::ops::Range;
 
 use annotate_snippets::{
     display_list::{DisplayList, FormatOptions},
@@ -6,102 +6,97 @@ use annotate_snippets::{
 };
 
 pub fn output_plain(
-    file: &Path,
+    file_name: &str,
     line_start: usize,
     column_start: usize,
     line_end: usize,
     column_end: usize,
-    _text: &str,
     suggestions: Vec<String>,
 ) {
     print!(
         "{} {}:{}-{}:{} info ",
-        file.display(),
-        line_start,
-        column_start,
-        line_end,
-        column_end,
+        file_name, line_start, column_start, line_end, column_end,
     );
-    for suggestion in suggestions {
-        print!("{}, ", suggestion);
+    for (index, suggestion) in suggestions.iter().enumerate() {
+        if index < suggestions.len() - 1 {
+            print!("{}, ", suggestion);
+        } else {
+            print!("{}", suggestion);
+        }
     }
     println!()
 }
 
-// const PRETTY_RANGE: usize = 20;
+pub fn output_pretty(
+    file_name: &str,
+    line_start: usize,
+    text: &str,
+    range: Range<usize>,
+    context_length: usize,
+    suggestions: Vec<String>,
+) {
+    let mut start = 0;
 
-// pub fn output_pretty(
-//     file: &Path,
-//     start: usize,
-//     length: usize,
-//     text: &str,
-//     _suggestions: Vec<String>,
-// ) {
-//     let mut last = 0;
-//     let file_name = format!("{}", file.display());
-//     for info in &response.matches {
-//         if info.offset > PRETTY_RANGE {
-//             start.advance(info.offset - PRETTY_RANGE - last);
-//             last = info.offset - PRETTY_RANGE;
-//         }
-//         print_pretty(&file_name, start, info);
-//     }
-//     start.advance(total - last);
-// }
+    for (index, (x, char)) in text[0..range.start].char_indices().rev().enumerate() {
+        if matches!(char, '\n' | '\t' | '\r') || index >= context_length {
+            start = x + char.len_utf8();
+            break;
+        }
+    }
 
-// fn print_pretty(file_name: &str, start: &Position, info: &Match) {
-//     let start_buffer = info.offset.min(PRETTY_RANGE);
+    let mut end = text.len();
+    for (index, (x, char)) in text[range.end..end].char_indices().enumerate() {
+        if matches!(char, '\n' | '\t' | '\r') || index >= context_length {
+            end = range.end + x;
+            break;
+        }
+    }
 
-//     let context = start
-//         .clone()
-//         .content
-//         .take(start_buffer + info.length + PRETTY_RANGE)
-//         .collect::<String>();
+    let context = &text[start..end];
+    let (mut char_start, mut char_end) = (0, 0);
+    for (index, (c_index, char)) in context.char_indices().enumerate() {
+        if c_index + start == range.start {
+            char_start = index;
+        } else if c_index + start + char.len_utf8() == range.end {
+            char_end = index + 1;
+            break;
+        }
+    }
 
-//     let mut annotations = Vec::new();
-//     annotations.push(SourceAnnotation {
-//         label: &info.message,
-//         annotation_type: AnnotationType::Info,
-//         range: (start_buffer, start_buffer + info.length),
-//     });
-//     for replacement in &info.replacements {
-//         let pos = start_buffer + info.length + 2;
-//         annotations.push(SourceAnnotation {
-//             label: &replacement.value,
-//             annotation_type: AnnotationType::Help,
-//             range: (pos, pos),
-//         })
-//     }
+    let mut annotations = Vec::new();
+    annotations.push(SourceAnnotation {
+        label: "",
+        annotation_type: AnnotationType::Info,
+        range: (char_start, char_end),
+    });
 
-//     if let Some(urls) = &info.rule.urls {
-//         for url in urls {
-//             annotations.push(SourceAnnotation {
-//                 label: &url.value,
-//                 annotation_type: AnnotationType::Note,
-//                 range: (2, 2),
-//             })
-//         }
-//     }
+    for replacement in &suggestions {
+        annotations.push(SourceAnnotation {
+            label: replacement,
+            annotation_type: AnnotationType::Help,
+            range: (char_start, char_start),
+        })
+    }
 
-//     let snippet = Snippet {
-//         title: Some(Annotation {
-//             label: Some(&info.rule.description),
-//             annotation_type: AnnotationType::Info,
-//             id: Some(&info.rule.id),
-//         }),
-//         footer: Vec::new(),
-//         slices: vec![Slice {
-//             source: &context,
-//             line_start: start.line,
-//             origin: Some(file_name),
-//             fold: true,
-//             annotations,
-//         }],
-//         opt: FormatOptions {
-//             color: true,
-//             anonymized_line_numbers: false,
-//             margin: None,
-//         },
-//     };
-//     println!("{}", DisplayList::from(snippet));
-// }
+    let snippet = Snippet {
+        title: Some(Annotation {
+            label: Some("Unknown word"),
+            annotation_type: AnnotationType::Info,
+            id: None,
+        }),
+        footer: Vec::new(),
+        slices: vec![Slice {
+            source: &context,
+            line_start: line_start,
+            origin: Some(file_name),
+            fold: true,
+            annotations,
+        }],
+        opt: FormatOptions {
+            color: true,
+            anonymized_line_numbers: false,
+            margin: None,
+        },
+    };
+    println!("{}", DisplayList::from(snippet));
+}

@@ -1,3 +1,5 @@
+use std::ops::Not;
+
 use typst_syntax::{SyntaxKind, SyntaxNode};
 
 use crate::checker::Checker;
@@ -30,20 +32,22 @@ impl State {
                 enum Last {
                     Start,
                     Whitespace,
-                    Other,
+                    Text,
                 }
 
                 let mut start = 0;
                 let mut last = Last::Start;
 
-                for (index, byte) in text.bytes().enumerate() {
+                for (index, char) in text.char_indices() {
                     match (
                         last,
-                        byte.is_ascii_whitespace() || byte.is_ascii_punctuation(),
+                        char.is_ascii_whitespace() || char.is_ascii_punctuation(),
                     ) {
                         (Last::Start, true) => last = Last::Whitespace,
-                        (Last::Start, false) => last = Last::Other,
-                        (Last::Other, true) => {
+                        (Last::Start, false) => last = Last::Text,
+                        (Last::Text, true)
+                            if char != '.' || checker.valid_word(index - start + 1).not() =>
+                        {
                             checker.check(index - start);
                             start = index;
                             last = Last::Whitespace;
@@ -51,14 +55,14 @@ impl State {
                         (Last::Whitespace, false) => {
                             checker.skip(index - start);
                             start = index;
-                            last = Last::Other;
+                            last = Last::Text;
                         }
                         _ => {}
                     }
                 }
                 match last {
                     Last::Start => {}
-                    Last::Other => checker.check(text.len() - start),
+                    Last::Text => checker.check(text.len() - start),
                     Last::Whitespace => checker.skip(text.len() - start),
                 }
             }

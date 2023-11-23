@@ -9,6 +9,7 @@ use notify_debouncer_mini::new_debouncer;
 use std::{
     fs::{self, File},
     io::Read,
+    ops::Not,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -36,22 +37,26 @@ pub enum Error {
 struct Args {
     task: Task,
 
-    /// File to check, may be a folder with `watch`
+    /// File to check, may be a folder with `watch`.
     path: PathBuf,
 
-    /// Document Language. Defaults to auto-detect, but explicit codes ("de-DE", "en-US", ...) enable more checks
+    /// Document Language. Defaults to auto-detect, but explicit codes ("de-DE", "en-US", ...) enable more checks.
     #[clap(short, long, default_value = None)]
     language: Option<String>,
 
-    /// Delay in seconds
+    /// Delay in seconds.
     #[clap(short, long, default_value_t = 0.1)]
     delay: f64,
 
-    /// Print results without annotations for easy regex evaluation
-    #[clap(short, long, default_value_t = false)]
-    plain: bool,
+    /// Print results with annotations. Disable for easy regex evaluation.
+    #[clap(short, long, default_value_t = true)]
+    pretty: bool,
 
-    /// Path to file with additional words
+    /// Chars before and after the word on the same line with pretty printing.
+    #[clap(long, default_value_t = 80)]
+    context_length: usize,
+
+    /// Path to file with additional words.
     #[clap(short, long, default_value = None)]
     words: Option<String>,
 }
@@ -112,14 +117,23 @@ fn handle_file(hunspell: &Hunspell, args: &Args, file: &Path) -> Result<(), Erro
     let text = fs::read_to_string(&file)?;
 
     let root = typst_syntax::parse(&text);
-    let mut checker = Checker::new(hunspell, text, file);
+    let mut checker = Checker::new(
+        hunspell,
+        text,
+        file,
+        if args.pretty {
+            Some(args.context_length)
+        } else {
+            None
+        },
+    );
 
-    if args.plain {
+    if args.pretty.not() {
         println!("START");
     }
     check::check(&root, &mut checker);
 
-    if args.plain {
+    if args.pretty.not() {
         println!("END");
     }
     Ok(())

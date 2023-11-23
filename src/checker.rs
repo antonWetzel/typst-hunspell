@@ -10,18 +10,25 @@ pub struct Checker<'a> {
     cursor: usize,
     path: &'a Path,
 
+    pretty: Option<usize>,
     line: usize,
     column: usize,
 }
 
 impl<'a> Checker<'a> {
-    pub fn new(hunspell: &'a Hunspell, text: String, path: &'a Path) -> Self {
+    pub fn new(
+        hunspell: &'a Hunspell,
+        text: String,
+        path: &'a Path,
+        pretty: Option<usize>,
+    ) -> Self {
         Self {
             hunspell,
             text,
             cursor: 0,
             path,
 
+            pretty,
             line: 1,
             column: 1,
         }
@@ -29,6 +36,16 @@ impl<'a> Checker<'a> {
 
     pub fn skip(&mut self, length: usize) {
         self.advance(length);
+    }
+
+    pub fn valid_word(&self, length: usize) -> bool {
+        match self
+            .hunspell
+            .check(&self.text[self.cursor..(self.cursor + length)])
+        {
+            CheckResult::FoundInDictionary => true,
+            CheckResult::MissingInDictionary => false,
+        }
     }
 
     pub fn check(&mut self, length: usize) {
@@ -41,15 +58,26 @@ impl<'a> Checker<'a> {
         self.advance(length);
         let (line_end, column_end) = (self.line, self.column);
         let suggestions = self.hunspell.suggest(&self.text[text_range.clone()]);
-        output::output_plain(
-            self.path,
-            line_start,
-            column_start,
-            line_end,
-            column_end,
-            &self.text[text_range],
-            suggestions,
-        );
+
+        if let Some(size) = self.pretty {
+            output::output_pretty(
+                &self.path.display().to_string(),
+                line_start,
+                &self.text,
+                text_range,
+                size,
+                suggestions,
+            );
+        } else {
+            output::output_plain(
+                &self.path.display().to_string(),
+                line_start,
+                column_start,
+                line_end,
+                column_end,
+                suggestions,
+            );
+        }
     }
 
     fn advance(&mut self, length: usize) {

@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-annotate-snippets = "0.9.1"
+annotate-snippets = { version = "0.9.2", features = ["color"] }
 clap = { version = "4.3.21", features = ["derive"] }
 hunspell-rs = { version = "0.4", features = ["bundled"] }
 notify = "6.0.1"
