@@ -11,7 +11,7 @@ pub fn output_plain(
     column_start: usize,
     line_end: usize,
     column_end: usize,
-    suggestions: Vec<String>,
+    suggestions: Vec<&str>,
 ) {
     print!(
         "{} {}:{}-{}:{} info ",
@@ -33,7 +33,7 @@ pub fn output_pretty(
     text: &str,
     range: Range<usize>,
     context_length: usize,
-    suggestions: Vec<String>,
+    suggestions: Vec<&str>,
 ) {
     let mut start = 0;
 

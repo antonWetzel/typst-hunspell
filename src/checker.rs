@@ -1,11 +1,9 @@
 use std::path::Path;
 
-use hunspell_rs::{CheckResult, Hunspell};
-
 use crate::output;
 
 pub struct Checker<'a> {
-    hunspell: &'a Hunspell,
+    zspell: &'a zspell::Dictionary,
     text: String,
     cursor: usize,
     path: &'a Path,
@@ -17,13 +15,13 @@ pub struct Checker<'a> {
 
 impl<'a> Checker<'a> {
     pub fn new(
-        hunspell: &'a Hunspell,
+        zspell: &'a zspell::Dictionary,
         text: String,
         path: &'a Path,
         pretty: Option<usize>,
     ) -> Self {
         Self {
-            hunspell,
+            zspell,
             text,
             cursor: 0,
             path,
@@ -39,25 +37,20 @@ impl<'a> Checker<'a> {
     }
 
     pub fn valid_word(&self, length: usize) -> bool {
-        match self
-            .hunspell
-            .check(&self.text[self.cursor..(self.cursor + length)])
-        {
-            CheckResult::FoundInDictionary => true,
-            CheckResult::MissingInDictionary => false,
-        }
+        self.zspell
+            .check_word(&self.text[self.cursor..(self.cursor + length)])
     }
 
     pub fn check(&mut self, length: usize) {
-        let text_range = self.cursor..(self.cursor + length);
-        match self.hunspell.check(&self.text[text_range.clone()]) {
-            CheckResult::MissingInDictionary => {}
-            CheckResult::FoundInDictionary => return self.advance(length),
-        }
         let (line_start, column_start) = (self.line, self.column);
+        let text_range = self.cursor..(self.cursor + length);
         self.advance(length);
+        let entry = self.zspell.entry(&self.text[text_range.clone()]);
+        let suggestions = match entry.suggest() {
+            Some(suggestions) => suggestions,
+            None => return,
+        };
         let (line_end, column_end) = (self.line, self.column);
-        let suggestions = self.hunspell.suggest(&self.text[text_range.clone()]);
 
         if let Some(size) = self.pretty {
             output::output_pretty(

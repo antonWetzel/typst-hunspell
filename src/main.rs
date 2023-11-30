@@ -3,7 +3,6 @@ mod checker;
 mod output;
 
 use clap::{Parser, ValueEnum};
-use hunspell_rs::Hunspell;
 use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
 use std::{
@@ -58,9 +57,8 @@ struct Args {
     path: PathBuf,
 
     /// Document Language. Use language codes from <https://github.com/wooorm/dictionaries/tree/main/dictionaries>.
-    /// Multiple Languages can be specified.
-    #[clap(short, long, default_value = "en", num_args = 1..)]
-    language: Vec<String>,
+    #[clap(short, long, default_value = "en")]
+    language: String,
 
     /// Delay in seconds for file watcher.
     #[clap(short, long, default_value_t = 0.1)]
@@ -89,43 +87,38 @@ fn main() -> Result<(), Error> {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push(format!(
         "dictionaries/dictionaries/{}/index.aff",
-        &args.language[0],
+        &args.language
     ));
 
-    let aff_path = path.display().to_string();
+    let aff_content = std::fs::read_to_string(&path).unwrap();
     path.set_extension("dic");
-    let dic_path = path.display().to_string();
+    let dic_content = std::fs::read_to_string(&path).unwrap();
 
-    let mut hunspell = Hunspell::new(&aff_path, &dic_path);
-
-    for language in args.language.iter().skip(1) {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push(format!("dictionaries/dictionaries/{}/index.dic", language));
-        hunspell.add_dictionary(&path.display().to_string());
-    }
-
-    if let Some(words) = &args.words {
-        let mut file = File::open(words).unwrap();
-        let mut data = String::new();
-        file.read_to_string(&mut data).unwrap();
-        for line in data.lines() {
-            hunspell.add(line);
-        }
-    }
+    let words = if let Some(words) = &args.words {
+        std::fs::read_to_string(&words).unwrap()
+    } else {
+        String::new()
+    };
+    let zspell = zspell::builder()
+        .config_str(&aff_content)
+        .dict_str(&dic_content)
+        .personal_str(&words)
+        .build()
+        .unwrap();
 
     match args.task {
-        Task::Check => check(args, hunspell)?,
-        Task::Watch => watch(args, hunspell)?,
+        Task::Check => check(args, zspell)?,
+        Task::Watch => watch(args, zspell)?,
     }
     Ok(())
 }
 
-fn check(args: Args, hunspell: Hunspell) -> Result<(), Error> {
-    handle_file(&hunspell, &args, &args.path)?;
+fn check(args: Args, zspell: zspell::Dictionary) -> Result<(), Error> {
+    handle_file(&zspell, &args, &args.path)?;
     Ok(())
 }
 
-fn watch(args: Args, mut hunspell: Hunspell) -> Result<(), Error> {
+fn watch(args: Args, zspell: zspell::Dictionary) -> Result<(), Error> {
     let (tx, rx) = std::sync::mpsc::channel();
     let mut watcher = new_debouncer(Duration::from_secs_f64(args.delay), None, tx)?;
     watcher
@@ -134,35 +127,23 @@ fn watch(args: Args, mut hunspell: Hunspell) -> Result<(), Error> {
 
     for events in rx {
         for event in events.unwrap() {
-            if let Some(words) = &args.words {
-                if event.path == Path::new(words) {
-                    let mut file = File::open(words).unwrap();
-                    let mut data = String::new();
-                    file.read_to_string(&mut data).unwrap();
-                    for line in data.lines() {
-                        hunspell.add(line);
-                    }
-                    continue;
-                }
-            }
-
             match event.path.extension() {
                 Some(ext) if ext == "typ" => {}
                 _ => continue,
             }
-            handle_file(&hunspell, &args, &event.path)?;
+            handle_file(&zspell, &args, &event.path)?;
         }
     }
 
     Ok(())
 }
 
-fn handle_file(hunspell: &Hunspell, args: &Args, file: &Path) -> Result<(), Error> {
+fn handle_file(zspell: &zspell::Dictionary, args: &Args, file: &Path) -> Result<(), Error> {
     let text = fs::read_to_string(&file)?;
 
     let root = typst_syntax::parse(&text);
     let mut checker = Checker::new(
-        hunspell,
+        zspell,
         text,
         file,
         if let Style::Pretty = args.style {
