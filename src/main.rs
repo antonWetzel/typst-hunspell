@@ -120,7 +120,7 @@ fn check(args: Args, zspell: zspell::Dictionary) -> Result<(), Error> {
 
 fn watch(args: Args, zspell: zspell::Dictionary) -> Result<(), Error> {
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = new_debouncer(Duration::from_secs_f64(args.delay), None, tx)?;
+    let mut watcher = new_debouncer(Duration::from_secs_f64(args.delay), tx)?;
     watcher
         .watcher()
         .watch(&args.path, RecursiveMode::Recursive)?;

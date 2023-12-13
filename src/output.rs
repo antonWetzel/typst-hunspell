@@ -55,10 +55,10 @@ pub fn output_pretty(
     let context = &text[start..end];
     let (mut char_start, mut char_end) = (0, 0);
     for (index, (c_index, char)) in context.char_indices().enumerate() {
+        char_end = index + 1;
         if c_index + start == range.start {
             char_start = index;
         } else if c_index + start + char.len_utf8() == range.end {
-            char_end = index + 1;
             break;
         }
     }
@@ -74,7 +74,7 @@ pub fn output_pretty(
         annotations.push(SourceAnnotation {
             label: replacement,
             annotation_type: AnnotationType::Help,
-            range: (char_start, char_start),
+            range: (char_start, char_end),
         })
     }
 
